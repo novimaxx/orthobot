@@ -19,13 +19,13 @@ const getTonLink = (amount) => `https://t.me/wallet?startapp=transfer_ton-${TON_
 const coursePaymentLinks = {
     'Базовий': 'https://secure.wayforpay.com/button/b1f0015ac7193',
     'Елайнери': 'https://secure.wayforpay.com/button/b2651049368d0',
-    'Pro': 'https://your-link-for-pro-course.com'
+    'Pro': 'https://secure.wayforpay.com/button/b60a182a4a627'
 };
 
 const prices = {
     'Базовий': '30000 UAH / 720 USDT',
     'Елайнери': '25000 UAH / 600 USDT',
-    'Pro': '***** UAH / ***** USDT'
+    'Pro': '20000 UAH / 500 USDT'
 };
 
 async function startProfileFilling(ctx, userId) {
@@ -39,7 +39,7 @@ function registerCourseScene(bot) {
     const usdtPrices = {
         'Базовий': 720,
         'Елайнери': 600,
-        'Pro': 0 //
+        'Pro': 500 //
     };
 
     const fields = {
@@ -370,10 +370,19 @@ IBAN: <code>UA273220010000026005330147569</code>
         }
 
         for (const lesson of availableLessons) {
-            await ctx.replyWithHTML(`✨ <b>${lesson.title}</b>\n\n${lesson.text}\n\n▶️ <a href="${lesson.video}">Переглянути</a>`);
-        }
+    // Заменим <br> и <br/> на перенос строки
+    const safeText = lesson.text.replace(/<br\s*\/?>/gi, '\n');
 
-        await ctx.answerCbQuery();
+    let message = `✨ <b>${lesson.title}</b>\n\n${safeText}`;
+
+    if (lesson.video) {
+        message += `\n\n▶️ <a href="${lesson.video}">Переглянути</a>`;
+    }
+
+    await ctx.replyWithHTML(message);
+}
+
+await ctx.answerCbQuery();
     });
 
     bot.action('start_profile_form', async (ctx) => {
