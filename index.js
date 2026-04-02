@@ -28,6 +28,14 @@ bot.start(async (ctx) => {
     if (payload) {
         if (payload.startsWith('ref')) {
             linkReferralByCode(payload, userId);
+        } else if (payload.startsWith('open_')) {
+            // Після оплати — відкрити курс одразу
+            const courseMap = { 'basic': 'Базовий', 'aligners': 'Елайнери', 'pro': 'Pro' };
+            const courseKey = payload.replace('open_', '');
+            const courseName = courseMap[courseKey];
+            if (courseName) {
+                ctx.session._pendingOpen = courseName;
+            }
         } else if (payload.startsWith('utm_')) {
             saveUtm(userId, payload);
 
@@ -65,6 +73,28 @@ bot.start(async (ctx) => {
                 }
             }
         );
+        // Якщо прийшов після оплати — відкрити курс одразу
+        if (ctx.session._pendingOpen) {
+            const courseName = ctx.session._pendingOpen;
+            ctx.session._pendingOpen = null;
+            const lessons = require('./lessons')[courseName];
+            if (lessons && lessons.length > 0) {
+                const now = new Date();
+                const available = lessons.filter(l => (l.delay || 0) === 0);
+                if (available.length > 0) {
+                    await ctx.reply(`🎓 <b>Курс "${courseName}" розпочато!</b>\n\nОсь перший урок 👇`, { parse_mode: 'HTML' });
+                    for (const lesson of available.slice(0, 1)) {
+                        const safeText = lesson.text.replace(/<br\s*\/?>/gi, '\n');
+                        let message = `✨ <b>${lesson.title}</b>\n\n${safeText}`;
+                        if (lesson.video) message += `\n\n▶️ <a href="${lesson.video}">Переглянути</a>`;
+                        await ctx.replyWithHTML(message);
+                    }
+                } else {
+                    await ctx.reply(`✅ Курс <b>${courseName}</b> активовано! Перший урок з'явиться незабаром.`, { parse_mode: 'HTML' });
+                }
+            }
+        }
+
         // Если пришёл с buy_ ссылкой — сразу показать оплату
         if (ctx.session._pendingBuy) {
             const courseName = ctx.session._pendingBuy;
