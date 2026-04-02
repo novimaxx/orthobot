@@ -63,8 +63,8 @@ function linkReferralByCode(code, invitedId) {
 // 🎁 Начисление бонуса каждый раз при оплате курса
 function tryGiveBonus(invitedId, courseName) {
     const coursePrices = {
-        'Базовий': 720,
-        'Елайнери': 600,
+        'Базовий': 650,
+        'Елайнери': 575,
         'Pro': 0
     };
 

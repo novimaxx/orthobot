@@ -1,34 +1,72 @@
-const { addAnnouncement, getLastAnnouncements, deleteAnnouncement, getAllUsers, saveUserField } = require('../helpers/db');
+const { addAnnouncement, getLastAnnouncements, deleteAnnouncement, getAllUsers, saveUserField, getUtmStats } = require('../helpers/db');
 const { Markup } = require('telegraf');
 
 const pendingWithdrawals = {};
 
-const adminId = Number(process.env.ADMIN_ID);
+const { isAdmin, canViewStats } = require('../helpers/admins');
 
 function registerAnnouncementScene(bot) {
     bot.command('admin', async (ctx) => {
-        if (ctx.from.id !== adminId) return;
+        if (!isAdmin(ctx.from.id)) return;
         await ctx.reply('🛠 Адмін-панель:', {
             reply_markup: {
                 inline_keyboard: [
                     [{ text: '➕ Додати анонс', callback_data: 'admin_add_announcement' }],
                     [{ text: '🗑 Видалити анонс', callback_data: 'admin_delete_announcement' }],
                     [{ text: '📤 Розіслати повідомлення', callback_data: 'admin_broadcast' }],
-                    [{ text: '📜 Згенерувати сертифікат', callback_data: 'admin_generate_certificate' }]
+                    [{ text: '📜 Згенерувати сертифікат', callback_data: 'admin_generate_certificate' }],
+                    [{ text: '📊 UTM статистика', callback_data: 'admin_utm_stats' }]
                 ]
             }
         });
     });
 
+    // UTM статистика — доступна через кнопку и команду /stats
+    async function sendUtmStats(ctx) {
+        const stats = getUtmStats();
+
+        if (stats.total === 0) {
+            return ctx.reply('📊 Поки що немає даних по UTM.');
+        }
+
+        let text = `📊 <b>UTM Статистика</b>\n\n`;
+        text += `👥 Всього з реклами: <b>${stats.total}</b>\n\n`;
+
+        text += `<b>По джерелах:</b>\n`;
+        for (const row of stats.bySource) {
+            text += `• <b>${row.utm_source || 'невідомо'}</b>: ${row.users} прийшло / ${row.paid} оплатило\n`;
+        }
+
+        if (stats.byCampaign.length > 0) {
+            text += `\n<b>По кампаніях:</b>\n`;
+            for (const row of stats.byCampaign) {
+                text += `• <b>${row.utm_source}/${row.utm_campaign}</b>: ${row.users} прийшло / ${row.paid} оплатило\n`;
+            }
+        }
+
+        await ctx.reply(text, { parse_mode: 'HTML' });
+    }
+
+    bot.action('admin_utm_stats', async (ctx) => {
+        if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
+        await ctx.answerCbQuery();
+        await sendUtmStats(ctx);
+    });
+
+    bot.command('stats', async (ctx) => {
+        if (!canViewStats(ctx.from.id)) return;
+        await sendUtmStats(ctx);
+    });
+
     bot.action('admin_add_announcement', async (ctx) => {
-        if (ctx.from.id !== adminId) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
+        if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
         ctx.session.waiting_announcement = true;
         await ctx.answerCbQuery();
         await ctx.reply('📝 Надішліть текст/фото для анонсу:');
     });
 
     bot.action('admin_delete_announcement', async (ctx) => {
-        if (ctx.from.id !== adminId) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
+        if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
 
         const announcements = getLastAnnouncements(5);
         if (announcements.length === 0) {
@@ -44,14 +82,14 @@ function registerAnnouncementScene(bot) {
     });
 
     bot.action(/^delete_ann_(\d+)$/, async (ctx) => {
-        if (ctx.from.id !== adminId) return;
+        if (!isAdmin(ctx.from.id)) return;
         const id = Number(ctx.match[1]);
         deleteAnnouncement(id);
         await ctx.answerCbQuery('✅ Анонс видалено!');
     });
 
     bot.action('admin_broadcast', async (ctx) => {
-        if (ctx.from.id !== adminId) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
+        if (!isAdmin(ctx.from.id)) return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
 
         ctx.session.waiting_broadcast = true;
         await ctx.reply('📝 Надішліть повідомлення для розсилки всім користувачам:');
@@ -61,7 +99,7 @@ function registerAnnouncementScene(bot) {
     // Приём анонсів
     bot.on(['text', 'photo', 'video', 'document'], async (ctx, next) => {
         if (ctx.session?.waiting_broadcast) {
-            if (ctx.from.id !== adminId) return;
+            if (!isAdmin(ctx.from.id)) return;
 
             const users = getAllUsers();
             let success = 0;
@@ -88,7 +126,7 @@ function registerAnnouncementScene(bot) {
         }
 
         if (ctx.session?.waiting_announcement) {
-            if (ctx.from.id !== adminId) return;
+            if (!isAdmin(ctx.from.id)) return;
 
             const msg = ctx.message;
             const content = msg.caption || msg.text || '[Без тексту]';

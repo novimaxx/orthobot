@@ -2,8 +2,7 @@ const { Markup } = require('telegraf');
 const { getUser } = require('../helpers/db');
 const paidKeyboard = require('../keyboards/paidKeyboard');
 require('dotenv').config();
-
-const adminId = Number(process.env.ADMIN_ID);
+const { notifyAdmins, notifyAdminsPhoto } = require('../helpers/admins');
 
 function registerSupportScene(bot) {
     console.log('🛟 Підтримка загружена');
@@ -57,31 +56,18 @@ function registerSupportScene(bot) {
             const senderInfo = `👤 ${from.first_name} (@${from.username || 'немає'}) [${from.id}]`;
 
             try {
+                const replyBtn = Markup.inlineKeyboard([[Markup.button.callback(`📨 Відповісти ${from.id}`, `reply_${from.id}`)]]);
+                const captionText = `📩 <b>Підтримка</b>\n\n${senderInfo}`;
+
                 if (msg.photo) {
                     const fileId = msg.photo.at(-1).file_id;
-                    await ctx.telegram.sendPhoto(adminId, fileId, {
-                        caption: `📩 <b>Підтримка</b>\n\n${senderInfo}`,
-                        parse_mode: 'HTML',
-                        ...Markup.inlineKeyboard([[Markup.button.callback(`📨 Відповісти ${from.id}`, `reply_${from.id}`)]])
-                    });
+                    await notifyAdminsPhoto(ctx.telegram, fileId, { caption: captionText, parse_mode: 'HTML', ...replyBtn });
                 } else if (msg.document) {
-                    await ctx.telegram.sendDocument(adminId, msg.document.file_id, {
-                        caption: `📩 <b>Підтримка</b>\n\n${senderInfo}`,
-                        parse_mode: 'HTML',
-                        ...Markup.inlineKeyboard([[Markup.button.callback(`📨 Відповісти ${from.id}`, `reply_${from.id}`)]])
-                    });
+                    await notifyAdminsPhoto(ctx.telegram, msg.document.file_id, { caption: captionText, parse_mode: 'HTML', ...replyBtn });
                 } else if (msg.video) {
-                    await ctx.telegram.sendVideo(adminId, msg.video.file_id, {
-                        caption: `📩 <b>Підтримка</b>\n\n${senderInfo}`,
-                        parse_mode: 'HTML',
-                        ...Markup.inlineKeyboard([[Markup.button.callback(`📨 Відповісти ${from.id}`, `reply_${from.id}`)]])
-                    });
+                    await notifyAdminsPhoto(ctx.telegram, msg.video.file_id, { caption: captionText, parse_mode: 'HTML', ...replyBtn });
                 } else if (msg.text) {
-                    await ctx.telegram.sendMessage(adminId,
-                        `📩 <b>Підтримка</b>\n\n${senderInfo}\n📝 <i>${msg.text}</i>`, {
-                            parse_mode: 'HTML',
-                            ...Markup.inlineKeyboard([[Markup.button.callback(`📨 Відповісти ${from.id}`, `reply_${from.id}`)]])
-                        });
+                    await notifyAdmins(ctx.telegram, `${captionText}\n📝 <i>${msg.text}</i>`, { parse_mode: 'HTML', ...replyBtn });
                 } else {
                     return ctx.reply('❌ Тип повідомлення не підтримується.');
                 }

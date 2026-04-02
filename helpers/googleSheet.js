@@ -1,11 +1,18 @@
-const { GoogleSpreadsheet } = require('google-spreadsheet');
-const creds = require('./credentials.json');
-
-const doc = new GoogleSpreadsheet(process.env.SHEET_ID);
+let doc;
+try {
+    const { GoogleSpreadsheet } = require('google-spreadsheet');
+    const creds = require('./credentials.json');
+    doc = new GoogleSpreadsheet(process.env.SHEET_ID);
+    doc._creds = creds;
+} catch (err) {
+    console.warn('⚠️ Google Sheets credentials not found, skipping integration');
+    doc = null;
+}
 
 async function appendUser(user) {
+    if (!doc) return;
     try {
-        await doc.useServiceAccountAuth(creds);
+        await doc.useServiceAccountAuth(doc._creds);
         await doc.loadInfo();
         const sheet = doc.sheetsByIndex[0];
 

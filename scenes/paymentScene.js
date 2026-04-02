@@ -2,6 +2,7 @@ const { savePayment } = require('../helpers/payments');
 const { handleSuccessfulPayment } = require('../helpers/handleSuccessfulPayment');
 const { getUser, saveUserField } = require('../helpers/db');
 const { Markup } = require('telegraf');
+const { notifyAdmins, notifyAdminsPhoto } = require('../helpers/admins');
 
 function registerPaymentScene(bot) {
 
@@ -30,11 +31,10 @@ function registerPaymentScene(bot) {
 
         const fileId = ctx.message.photo.pop().file_id;
         const username = ctx.from.username ? `@${ctx.from.username}` : 'немає';
-        const adminId = Number(process.env.ADMIN_ID);
 
         await savePayment({ userId, course, fileId });
 
-        await ctx.telegram.sendPhoto(adminId, fileId, {
+        await notifyAdminsPhoto(ctx.telegram, fileId, {
             caption: `🧾 Новий платіж на перевірку\n👤 ${ctx.from.first_name} (${username})\n📘 ${course}\n🆔 ${userId}`,
             parse_mode: 'HTML',
             ...Markup.inlineKeyboard([
@@ -54,11 +54,10 @@ function registerPaymentScene(bot) {
         if (!course) return next();
 
         const username = ctx.from.username ? `@${ctx.from.username}` : 'немає';
-        const adminId = Number(process.env.ADMIN_ID);
 
         await savePayment({ userId, course, text: ctx.message.text });
 
-        await ctx.telegram.sendMessage(adminId, `🧾 Новий текстовий платіж\n👤 ${ctx.from.first_name} (${username})\n📘 ${course}\n🆔 ${userId}\n\n✉️ ${ctx.message.text}`, {
+        await notifyAdmins(ctx.telegram, `🧾 Новий текстовий платіж\n👤 ${ctx.from.first_name} (${username})\n📘 ${course}\n🆔 ${userId}\n\n✉️ ${ctx.message.text}`, {
             parse_mode: 'HTML',
             ...Markup.inlineKeyboard([
                 [Markup.button.callback(`✅ Видати курс (${userId})`, `approve_${userId}_${course}`),

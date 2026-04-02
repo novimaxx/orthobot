@@ -3,15 +3,14 @@ const app = express();
 const port = 3001;
 const crypto = require('crypto');
 
-// Твоя функция генерации HTML-формы
 function generateWayForPayForm(userId, courseName, amount) {
-    const merchantAccount = 'stomat_podcast_com_ua';
-    const secretKey = 'cbab689d5545a0ce0b5d8e3ca780466139677db0';
-    const domain = 'stomat-podcast.com.ua';
+    const merchantAccount = process.env.MERCHANT_ACCOUNT || 'stomat_podcast_com_ua';
+    const secretKey = process.env.SECRET_KEY || 'cbab689d5545a0ce0b5d8e3ca780466139677db0';
+    const domain = process.env.DOMAIN || 'stomat-podcast.com.ua';
     const orderReference = `order-${userId}-${Date.now()}`;
     const orderDate = Math.floor(Date.now() / 1000);
 
-    const productName = [courseName];
+    const productName = [`${courseName} — Онлайн-школа ортодонтії від А до Я`];
     const productCount = [1];
     const productPrice = [amount];
 
@@ -38,6 +37,8 @@ function generateWayForPayForm(userId, courseName, amount) {
 <form id="payForm" method="POST" action="https://secure.wayforpay.com/pay" style="display:none">
         <input type="hidden" name="merchantAccount" value="${merchantAccount}" />
         <input type="hidden" name="merchantDomainName" value="${domain}" />
+        <input type="hidden" name="merchantTransactionSecureType" value="AUTO" />
+        <input type="hidden" name="language" value="UA" />
         <input type="hidden" name="orderReference" value="${orderReference}" />
         <input type="hidden" name="orderDate" value="${orderDate}" />
         <input type="hidden" name="amount" value="${amount}" />
@@ -45,7 +46,11 @@ function generateWayForPayForm(userId, courseName, amount) {
         <input type="hidden" name="productName" value="${productName.join(';')}" />
         <input type="hidden" name="productCount" value="${productCount.join(';')}" />
         <input type="hidden" name="productPrice" value="${productPrice.join(';')}" />
-        <input type="hidden" name="orderDesc" value="Оплата за онлайн навчання: ${courseName}" />
+        <input type="hidden" name="orderDesc" value="Оплата онлайн-навчання: ${courseName}" />
+        <input type="hidden" name="clientFirstName" value="" />
+        <input type="hidden" name="clientEmail" value="" />
+        <input type="hidden" name="clientPhone" value="" />
+        <input type="hidden" name="paymentSystems" value="card;googlePay;applePay;privat24;monobank" />
         <input type="hidden" name="merchantSignature" value="${signature}" />
     </form>
             <script>document.getElementById('payForm').submit();</script>
@@ -54,7 +59,6 @@ function generateWayForPayForm(userId, courseName, amount) {
     `;
 }
 
-// Роут для оплаты
 app.get('/pay', (req, res) => {
     const { userId, courseName, amount } = req.query;
 
@@ -67,5 +71,5 @@ app.get('/pay', (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`💳 Payment server running at http://localhost:${port}`);
+    console.log(`Payment server running at http://localhost:${port}`);
 });

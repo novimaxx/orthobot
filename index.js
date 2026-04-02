@@ -14,9 +14,10 @@ bot.use(async (ctx, next) => {
 
 const mainMenu = require('./keyboards/mainMenu');
 const casesMessage = require('./messages/cases');
-const { ensureUserExists, getUserCourses } = require('./helpers/db');
+const { ensureUserExists, getUserCourses, saveUtm } = require('./helpers/db');
 const paidKeyboard = require('./keyboards/paidKeyboard');
 const { linkReferralByCode } = require('./helpers/referrals');
+const { showCoursePayment } = require('./scenes/courseScene');
 const welcomeMessage = require('./messages/welcome');
 const offlineCourse = require('./messages/offlineCourse');
 
@@ -24,8 +25,26 @@ bot.start(async (ctx) => {
     const userId = ctx.from.id;
     const payload = ctx.startPayload;
 
-    if (payload && payload.startsWith('ref')) {
-        linkReferralByCode(payload, userId);
+    if (payload) {
+        if (payload.startsWith('ref')) {
+            linkReferralByCode(payload, userId);
+        } else if (payload.startsWith('utm_')) {
+            saveUtm(userId, payload);
+
+            // Если в UTM есть buy_ — показать оплату курса после приветствия
+            const buyMatch = payload.match(/buy_(\w+)/);
+            if (buyMatch) {
+                const courseMap = {
+                    'basic': 'Базовий',
+                    'aligners': 'Елайнери',
+                    'pro': 'Pro'
+                };
+                const courseName = courseMap[buyMatch[1]];
+                if (courseName) {
+                    ctx.session._pendingBuy = courseName;
+                }
+            }
+        }
     }
 
     ensureUserExists(userId);
@@ -46,6 +65,12 @@ bot.start(async (ctx) => {
                 }
             }
         );
+        // Если пришёл с buy_ ссылкой — сразу показать оплату
+        if (ctx.session._pendingBuy) {
+            const courseName = ctx.session._pendingBuy;
+            ctx.session._pendingBuy = null;
+            await showCoursePayment(ctx, courseName);
+        }
     } catch (error) {
         console.error('❗ Ошибка отправки приветствия:', error.message);
     }

@@ -11,6 +11,8 @@ const courseList = require('../keyboards/courseList');
 const { appendUser } = require('../helpers/googleSheet');
 const paidKeyboard = require('../keyboards/paidKeyboard');
 const { createInvoice } = require('../helpers/cryptoBot');
+const { getUsdToUahRate, convertUsdToUah } = require('../helpers/exchangeRate');
+const { notifyAdmins } = require('../helpers/admins');
 
 
 const TON_ADDRESS = 'UQC5XufXgi0cDm_Pl3RknzgjqdDUIs8J0jOeEr90d1teloy2';
@@ -22,10 +24,10 @@ const coursePaymentLinks = {
     'Pro': 'https://secure.wayforpay.com/button/b60a182a4a627'
 };
 
-const prices = {
-    'Базовий': '30000 UAH / 720 USDT',
-    'Елайнери': '25000 UAH / 600 USDT',
-    'Pro': '20000 UAH / 500 USDT'
+const usdPrices = {
+    'Базовий': 650,
+    'Елайнери': 575,
+    'Pro': 475
 };
 
 async function startProfileFilling(ctx, userId) {
@@ -35,12 +37,64 @@ async function startProfileFilling(ctx, userId) {
     });
 }
 
+async function showCoursePayment(ctx, courseName) {
+    const userId = ctx.from.id;
+    const usdAmount = usdPrices[courseName];
+    if (!usdAmount) return ctx.reply('Курс не знайдено.');
+
+    const uahAmount = await convertUsdToUah(usdAmount);
+    const rate = await getUsdToUahRate();
+
+    await setCourse(userId, courseName);
+
+    const paymentBase = process.env.PAYMENT_URL;
+    const paymentUrl = paymentBase
+        ? `${paymentBase}/pay?userId=${userId}&courseName=${encodeURIComponent(courseName)}&amount=${uahAmount}`
+        : coursePaymentLinks[courseName];
+
+    let cryptoLink;
+    try {
+        cryptoLink = await createInvoice(usdAmount, userId);
+    } catch (error) {
+        console.error('Не вдалося створити інвойс у CryptoBot:', error.message);
+        cryptoLink = null;
+    }
+
+    const text = `✅ <b>Курс обрано!</b>
+
+<b>Прайс:</b> ${usdAmount} USD (~${uahAmount} грн за курсом НБУ ${rate.toFixed(2)})
+
+<b>Також доступна оплата частинами!</b>
+
+<b>Або за банківськими реквізитами:</b>
+🏦 <b>ФОП Штунь Денис Олександрович</b>
+IBAN: <code>UA273220010000026005330147569</code>
+ІПН/ЄДРПОУ: <code>3543105355</code>
+Банк: Акціонерне товариство УНІВЕРСАЛ БАНК
+МФО: <code>322001</code>
+ОКПО Банку: <code>21133352</code>
+
+📋 <i>В призначенні платежу вкажіть: «Онлайн-навчання»</i>
+💵 <i>Сума до сплати: <b>${uahAmount} грн</b> (${usdAmount} USD)</i>
+
+🧾 <b>Після оплати обов'язково надішліть фото квитанції</b> за допомогою кнопки нижче 👇`;
+
+    const buttons = [
+        [Markup.button.url('💳 Карткою (WayForPay)', paymentUrl)],
+    ];
+    if (cryptoLink) {
+        buttons.push([Markup.button.url('💰 CryptoBot (USDT)', cryptoLink)]);
+    }
+    buttons.push([Markup.button.callback('📸 Надіслати квитанцію', `confirm_screenshot_${courseName}`)]);
+
+    await ctx.reply(text, {
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+        ...Markup.inlineKeyboard(buttons)
+    });
+}
+
 function registerCourseScene(bot) {
-    const usdtPrices = {
-        'Базовий': 720,
-        'Елайнери': 600,
-        'Pro': 500 //
-    };
 
     const fields = {
         edit_name: 'name',
@@ -82,11 +136,10 @@ function registerCourseScene(bot) {
         const stats = getReferralStats(userId);
 
         const cashback = stats.cashbackUsd || 0;
-        const adminId = Number(process.env.ADMIN_ID);
 
         await ctx.reply('🏦 Ви подали заявку на виведення кешбеку! Очікуйте підтвердження.');
 
-        await ctx.telegram.sendMessage(adminId,
+        await notifyAdmins(ctx.telegram,
             `📤 <b>Нова заявка на виведення кешбеку!</b>\n\n👤 ${firstName} (${username})\n🆔 ID: <code>${userId}</code>\n💰 Сума кешбеку: <b>${cashback} USDT</b>`,
             {
                 parse_mode: 'HTML',
@@ -145,57 +198,7 @@ function registerCourseScene(bot) {
 
     bot.action(/^pay_(.+)$/, async (ctx) => {
         await ctx.answerCbQuery();
-        const userId = ctx.from.id;
-        const courseName = ctx.match[1];
-
-        const price = prices[courseName];
-        const paymentUrl = coursePaymentLinks[courseName];
-        const usdtAmount = usdtPrices[courseName];
-
-        await setCourse(userId, courseName);
-
-        let cryptoLink;
-        try {
-            cryptoLink = await createInvoice(usdtAmount, userId);
-        } catch (error) {
-            console.error('❗ Не вдалося створити інвойс у CryptoBot:', error.message);
-            cryptoLink = null;
-        }
-
-        let text = `✅ <b>Курс обрано!</b>
-
-<b>Прайс:</b> ${price}
-
-<b>Також доступна оплата частинами!</b>
-
-<b>Оберіть зручний спосіб оплати:</b>
-• <a href="${paymentUrl}">Карткою (WayForPay)</a>`;
-
-        if (cryptoLink) {
-            text += `\n• <a href="${cryptoLink}">Оплата через CryptoBot (USDT)</a>`;
-        }
-
-        text += `
-
-<b>Або за банківськими реквізитами:</b>
-🏦 <b>ФОП Штунь Денис Олександрович</b>
-IBAN: <code>UA273220010000026005330147569</code>
-ІПН/ЄДРПОУ: <code>3543105355</code>
-Банк: Акціонерне товариство УНІВЕРСАЛ БАНК
-МФО: <code>322001</code>
-ОКПО Банку: <code>21133352</code>
-
-📋 <i>В призначенні платежу вкажіть: «Онлайн-навчання»</i>
-
-🧾 <b>Після оплати обов’язково надішліть фото квитанції</b> за допомогою кнопки нижче 👇`;
-
-        await ctx.reply(text, {
-            parse_mode: 'HTML',
-            disable_web_page_preview: true,
-            ...Markup.inlineKeyboard([
-                [Markup.button.callback('📸 Надіслати квитанцію', `confirm_screenshot_${courseName}`)]
-            ])
-        });
+        await showCoursePayment(ctx, ctx.match[1]);
     });
 
     bot.action(/^confirm_screenshot_(.+)$/, async (ctx) => {
@@ -222,7 +225,7 @@ IBAN: <code>UA273220010000026005330147569</code>
 
             const premiumStatus = user.is_premium ? '⭐️ Premium' : '';
 
-            const profile = `👤 <b>Профіль</b>\n\n<b>Ім’я:</b> ${user.name || '—'}
+            const profile = `👤 <b>Профіль</b>\n\n<b>Ім'я:</b> ${user.name || '—'}
 <b>Email:</b> ${user.email || '—'}
 <b>Телефон:</b> ${user.phone || '—'}
 
@@ -300,7 +303,7 @@ IBAN: <code>UA273220010000026005330147569</code>
         await ctx.reply('🔧 Що саме бажаєте змінити?', {
             reply_markup: {
                 inline_keyboard: [
-                    [Markup.button.callback('✏️ Ім’я', 'edit_name'), Markup.button.callback('📧 Email', 'edit_email')],
+                    [Markup.button.callback("✏️ Ім'я", 'edit_name'), Markup.button.callback('📧 Email', 'edit_email')],
                     [Markup.button.callback('📱 Телефон', 'edit_phone'), Markup.button.callback('🏙️ Місто', 'edit_city')],
                     [Markup.button.callback('🎓 Освіта', 'edit_education'), Markup.button.callback('💼 Посада', 'edit_position')],
                     [Markup.button.callback('🏥 Робота', 'edit_job'), Markup.button.callback('🎂 Дата нар.', 'edit_birth')],
@@ -415,10 +418,9 @@ await ctx.answerCbQuery();
         const username = ctx.from.username ? `@${ctx.from.username}` : 'немає';
         const firstName = ctx.from.first_name || 'Без імені';
 
-        const adminId = Number(process.env.ADMIN_ID);
         await ctx.reply('🏦 Ваш запит на кешбек за розбір кейсів надіслано адміністратору!');
 
-        await ctx.telegram.sendMessage(adminId,
+        await notifyAdmins(ctx.telegram,
             `📤 <b>Нова заявка на кешбек за розбір кейсів!</b>\n\n👤 ${firstName} (${username})\n🆔 ID: <code>${userId}</code>`,
             {
                 parse_mode: 'HTML',
@@ -435,3 +437,4 @@ await ctx.answerCbQuery();
 }
 
 module.exports = registerCourseScene;
+module.exports.showCoursePayment = showCoursePayment;

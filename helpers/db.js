@@ -54,6 +54,19 @@ db.prepare(`
     )
 `).run();
 
+// ✅ Создание таблицы UTM трекинга
+db.prepare(`
+    CREATE TABLE IF NOT EXISTS utm_tracking (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER,
+        utm_source TEXT,
+        utm_medium TEXT,
+        utm_campaign TEXT,
+        raw_param TEXT,
+        created_at TEXT
+    )
+`).run();
+
 // --- Функции ---
 function addAnnouncement({ content, type = null, file_id = null }) {
     const stmt = db.prepare(`INSERT INTO announcements (content, type, file_id, created_at) VALUES (?, ?, ?, ?)`);
@@ -133,9 +146,58 @@ function getAllUsers() {
     return db.prepare('SELECT id FROM users').all();
 }
 
+// --- UTM функции ---
+function saveUtm(userId, rawParam) {
+    const existing = db.prepare('SELECT id FROM utm_tracking WHERE user_id = ?').get(userId);
+    if (existing) return; // уже есть UTM для этого юзера
+
+    // Формат: utm_SOURCE_MEDIUM_CAMPAIGN или utm_SOURCE_CAMPAIGN
+    const parts = rawParam.replace(/^utm_/, '').split('_');
+    const source = parts[0] || null;
+    const medium = parts[1] || null;
+    const campaign = parts.slice(2).join('_') || null;
+
+    db.prepare(`
+        INSERT INTO utm_tracking (user_id, utm_source, utm_medium, utm_campaign, raw_param, created_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(userId, source, medium, campaign, rawParam, new Date().toISOString());
+}
+
+function getUtmByUser(userId) {
+    return db.prepare('SELECT * FROM utm_tracking WHERE user_id = ?').get(userId);
+}
+
+function getUtmStats() {
+    const total = db.prepare('SELECT COUNT(*) as count FROM utm_tracking').get().count;
+
+    const bySource = db.prepare(`
+        SELECT utm_source, COUNT(*) as users,
+        (SELECT COUNT(*) FROM user_courses uc
+         INNER JOIN utm_tracking ut2 ON uc.user_id = ut2.user_id
+         WHERE ut2.utm_source = utm_tracking.utm_source AND uc.access_granted = 1) as paid
+        FROM utm_tracking
+        GROUP BY utm_source
+        ORDER BY users DESC
+    `).all();
+
+    const byCampaign = db.prepare(`
+        SELECT utm_source, utm_campaign, COUNT(*) as users,
+        (SELECT COUNT(*) FROM user_courses uc
+         INNER JOIN utm_tracking ut2 ON uc.user_id = ut2.user_id
+         WHERE ut2.utm_source = utm_tracking.utm_source
+         AND ut2.utm_campaign = utm_tracking.utm_campaign AND uc.access_granted = 1) as paid
+        FROM utm_tracking
+        WHERE utm_campaign IS NOT NULL
+        GROUP BY utm_source, utm_campaign
+        ORDER BY users DESC
+    `).all();
+
+    return { total, bySource, byCampaign };
+}
+
 // --- Экспорт ---
 module.exports = {
-    db, // ❗️ Саму базу тоже экспортируем!
+    db,
     saveUserField,
     getUser,
     setCourse,
@@ -146,5 +208,8 @@ module.exports = {
     addAnnouncement,
     getLastAnnouncements,
     deleteAnnouncement,
-    getAllUsers
+    getAllUsers,
+    saveUtm,
+    getUtmByUser,
+    getUtmStats
 };

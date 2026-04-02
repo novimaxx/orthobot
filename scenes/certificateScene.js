@@ -5,13 +5,13 @@ const fs = require('fs');
 
 const congratsMessages = require('../messages/congratsMessages');
 
-const adminId = Number(process.env.ADMIN_ID);
+const { isAdmin } = require('../helpers/admins');
 
 registerFont(path.join(__dirname, '..', 'assets', 'Montserrat-Bold.ttf'), { family: 'Montserrat' });
 
 function registerCertificateScene(bot) {
     bot.action('admin_generate_certificate', async (ctx) => {
-        if (ctx.from.id !== adminId) {
+        if (!isAdmin(ctx.from.id)) {
             return ctx.answerCbQuery('❌ Немає доступу.', { show_alert: true });
         }
 
