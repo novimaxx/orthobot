@@ -43,6 +43,7 @@ function generateWayForPayForm(userId, courseName, amount) {
         <input type="hidden" name="orderDate" value="${orderDate}" />
         <input type="hidden" name="amount" value="${amount}" />
         <input type="hidden" name="currency" value="UAH" />
+        <input type="hidden" name="productLogo" value="https://s10.iimage.su/s/02/g1YEjwNxstEfAmi439LovVgsnrvZCwFqCAm9iMXjJ.jpg" />
         <input type="hidden" name="productName" value="${productName.join(';')}" />
         <input type="hidden" name="productCount" value="${productCount.join(';')}" />
         <input type="hidden" name="productPrice" value="${productPrice.join(';')}" />
