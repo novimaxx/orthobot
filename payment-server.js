@@ -163,6 +163,9 @@ app.get('/success', (req, res) => {
     renderSuccess(courseKey, res);
 });
 
+// Захист від дублікатів — зберігаємо оброблені orderReference
+const processedOrders = new Set();
+
 // Webhook від WayForPay — автоматична видача доступу
 app.post('/webhook', async (req, res) => {
     try {
@@ -213,7 +216,15 @@ app.post('/webhook', async (req, res) => {
             return res.status(400).json({ status: 'error', message: 'Invalid signature' });
         }
 
+        // Захист від дублікатів
+        if (processedOrders.has(orderReference)) {
+            console.log(`⚠️ Дублікат webhook: ${orderReference}`);
+            const responseSignature = crypto.createHmac('md5', secretKey).update(`${orderReference};accept`).digest('hex');
+            return res.json({ orderReference, status: 'accept', time: Math.floor(Date.now() / 1000), signature: responseSignature });
+        }
+
         if (transactionStatus === 'Approved') {
+            processedOrders.add(orderReference);
             // Парсимо orderReference: order-USERID-COURSEKEY-TIMESTAMP
             const parts = orderReference.split('-');
             const userId = parts[1];
