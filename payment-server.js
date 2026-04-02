@@ -208,13 +208,9 @@ app.post('/webhook', async (req, res) => {
             .update(signatureSource)
             .digest('hex');
 
-        console.log('📥 WayForPay webhook data:', JSON.stringify(data));
-        console.log('🔑 Expected signature:', expectedSignature);
-        console.log('🔑 Received signature:', merchantSignature);
-
         if (merchantSignature !== expectedSignature) {
             console.error('❌ Невірний підпис від WayForPay');
-            // Тимчасово продовжуємо щоб побачити дані
+            return res.status(400).json({ status: 'error', message: 'Invalid signature' });
         }
 
         if (transactionStatus === 'Approved') {
