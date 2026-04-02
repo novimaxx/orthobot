@@ -81,9 +81,7 @@ function generateWayForPayForm(userId, courseName, amount) {
     `;
 }
 
-// Страница "Дякуємо" після оплати
-app.get('/success', (req, res) => {
-    const courseKey = req.query.course || 'basic';
+function renderSuccess(courseKey, res) {
     const courseName = courseNameMap[courseKey] || courseKey;
     const botLink = `https://t.me/Ortho_SchoolBot?start=open_${courseKey}`;
 
@@ -152,6 +150,17 @@ app.get('/success', (req, res) => {
         </body>
         </html>
     `);
+}
+
+// WayForPay робить POST на returnUrl
+app.post('/success', (req, res) => {
+    const courseKey = req.query.course || req.body.course || 'basic';
+    renderSuccess(courseKey, res);
+});
+
+app.get('/success', (req, res) => {
+    const courseKey = req.query.course || 'basic';
+    renderSuccess(courseKey, res);
 });
 
 // Webhook від WayForPay — автоматична видача доступу
