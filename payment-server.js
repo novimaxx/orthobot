@@ -166,7 +166,17 @@ app.get('/success', (req, res) => {
 // Webhook від WayForPay — автоматична видача доступу
 app.post('/webhook', async (req, res) => {
     try {
-        const data = req.body;
+        let data = req.body;
+
+        // WayForPay надсилає JSON як ключ у form-encoded body — парсимо
+        const bodyKeys = Object.keys(data);
+        if (bodyKeys.length === 1 && bodyKeys[0].startsWith('{')) {
+            try {
+                data = JSON.parse(bodyKeys[0]);
+            } catch(e) {
+                console.error('❌ Failed to parse webhook body:', e.message);
+            }
+        }
         const secretKey = process.env.SECRET_KEY || 'cbab689d5545a0ce0b5d8e3ca780466139677db0';
 
         const {
