@@ -77,20 +77,29 @@ bot.start(async (ctx) => {
         if (ctx.session._pendingOpen) {
             const courseName = ctx.session._pendingOpen;
             ctx.session._pendingOpen = null;
-            const lessons = require('./lessons')[courseName];
-            if (lessons && lessons.length > 0) {
-                const now = new Date();
-                const available = lessons.filter(l => (l.delay || 0) === 0);
-                if (available.length > 0) {
-                    await ctx.reply(`🎓 <b>Курс "${courseName}" розпочато!</b>\n\nОсь перший урок 👇`, { parse_mode: 'HTML' });
-                    for (const lesson of available.slice(0, 1)) {
-                        const safeText = lesson.text.replace(/<br\s*\/?>/gi, '\n');
-                        let message = `✨ <b>${lesson.title}</b>\n\n${safeText}`;
-                        if (lesson.video) message += `\n\n▶️ <a href="${lesson.video}">Переглянути</a>`;
-                        await ctx.replyWithHTML(message);
+
+            // Перевіряємо чи є доступ до курсу
+            const { hasUserCourse } = require('./helpers/db');
+            const hasAccess = hasUserCourse(userId, courseName);
+
+            if (!hasAccess) {
+                // Немає доступу — показуємо сторінку оплати
+                await showCoursePayment(ctx, courseName);
+            } else {
+                const lessons = require('./lessons')[courseName];
+                if (lessons && lessons.length > 0) {
+                    const available = lessons.filter(l => (l.delay || 0) === 0);
+                    if (available.length > 0) {
+                        await ctx.reply(`🎓 <b>Курс "${courseName}" розпочато!</b>\n\nОсь перший урок 👇`, { parse_mode: 'HTML' });
+                        for (const lesson of available.slice(0, 1)) {
+                            const safeText = lesson.text.replace(/<br\s*\/?>/gi, '\n');
+                            let message = `✨ <b>${lesson.title}</b>\n\n${safeText}`;
+                            if (lesson.video) message += `\n\n▶️ <a href="${lesson.video}">Переглянути</a>`;
+                            await ctx.replyWithHTML(message);
+                        }
+                    } else {
+                        await ctx.reply(`✅ Курс <b>${courseName}</b> активовано! Перший урок з'явиться незабаром.`, { parse_mode: 'HTML' });
                     }
-                } else {
-                    await ctx.reply(`✅ Курс <b>${courseName}</b> активовано! Перший урок з'явиться незабаром.`, { parse_mode: 'HTML' });
                 }
             }
         }
