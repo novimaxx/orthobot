@@ -171,24 +171,23 @@ function getUtmStats() {
     const total = db.prepare('SELECT COUNT(*) as count FROM utm_tracking').get().count;
 
     const bySource = db.prepare(`
-        SELECT utm_source, COUNT(*) as users,
-        (SELECT COUNT(*) FROM user_courses uc
-         INNER JOIN utm_tracking ut2 ON uc.user_id = ut2.user_id
-         WHERE ut2.utm_source = utm_tracking.utm_source AND uc.access_granted = 1) as paid
-        FROM utm_tracking
-        GROUP BY utm_source
+        SELECT ut.utm_source,
+               COUNT(DISTINCT ut.user_id) as users,
+               COUNT(DISTINCT CASE WHEN uc.access_granted = 1 THEN ut.user_id END) as paid
+        FROM utm_tracking ut
+        LEFT JOIN user_courses uc ON ut.user_id = uc.user_id
+        GROUP BY ut.utm_source
         ORDER BY users DESC
     `).all();
 
     const byCampaign = db.prepare(`
-        SELECT utm_source, utm_campaign, COUNT(*) as users,
-        (SELECT COUNT(*) FROM user_courses uc
-         INNER JOIN utm_tracking ut2 ON uc.user_id = ut2.user_id
-         WHERE ut2.utm_source = utm_tracking.utm_source
-         AND ut2.utm_campaign = utm_tracking.utm_campaign AND uc.access_granted = 1) as paid
-        FROM utm_tracking
-        WHERE utm_campaign IS NOT NULL
-        GROUP BY utm_source, utm_campaign
+        SELECT ut.utm_source, ut.utm_campaign,
+               COUNT(DISTINCT ut.user_id) as users,
+               COUNT(DISTINCT CASE WHEN uc.access_granted = 1 THEN ut.user_id END) as paid
+        FROM utm_tracking ut
+        LEFT JOIN user_courses uc ON ut.user_id = uc.user_id
+        WHERE ut.utm_campaign IS NOT NULL
+        GROUP BY ut.utm_source, ut.utm_campaign
         ORDER BY users DESC
     `).all();
 
