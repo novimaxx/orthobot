@@ -163,8 +163,20 @@ app.get('/success', (req, res) => {
     renderSuccess(courseKey, res);
 });
 
-// Захист від дублікатів — зберігаємо оброблені orderReference
-const processedOrders = new Set();
+// Захист від дублікатів — зберігаємо в SQLite
+const Database = require('better-sqlite3');
+const db = new Database('./data/database.db');
+db.exec(`CREATE TABLE IF NOT EXISTS processed_orders (
+    order_reference TEXT PRIMARY KEY,
+    created_at TEXT DEFAULT (datetime('now'))
+)`);
+
+function isOrderProcessed(orderRef) {
+    return !!db.prepare('SELECT 1 FROM processed_orders WHERE order_reference = ?').get(orderRef);
+}
+function markOrderProcessed(orderRef) {
+    db.prepare('INSERT OR IGNORE INTO processed_orders (order_reference) VALUES (?)').run(orderRef);
+}
 
 // Webhook від WayForPay — автоматична видача доступу
 app.post('/webhook', async (req, res) => {
@@ -217,14 +229,14 @@ app.post('/webhook', async (req, res) => {
         }
 
         // Захист від дублікатів
-        if (processedOrders.has(orderReference)) {
+        if (isOrderProcessed(orderReference)) {
             console.log(`⚠️ Дублікат webhook: ${orderReference}`);
             const responseSignature = crypto.createHmac('md5', secretKey).update(`${orderReference};accept`).digest('hex');
             return res.json({ orderReference, status: 'accept', time: Math.floor(Date.now() / 1000), signature: responseSignature });
         }
 
         if (transactionStatus === 'Approved') {
-            processedOrders.add(orderReference);
+            markOrderProcessed(orderReference);
             // Парсимо orderReference: order-USERID-COURSEKEY-TIMESTAMP
             const parts = orderReference.split('-');
             const userId = parts[1];
