@@ -36,6 +36,8 @@ bot.start(async (ctx) => {
             if (courseName) {
                 ctx.session._pendingOpen = courseName;
             }
+        } else if (payload === 'support') {
+            ctx.session._pendingSupport = true;
         } else if (payload.startsWith('utm_')) {
             saveUtm(userId, payload);
 
@@ -102,6 +104,15 @@ bot.start(async (ctx) => {
                     }
                 }
             }
+        }
+
+        // Якщо прийшов з посилання підтримки — одразу відкрити підтримку
+        if (ctx.session._pendingSupport) {
+            ctx.session._pendingSupport = false;
+            ctx.session.support = true;
+            await ctx.reply('✉️ Напишіть повідомлення або задайте питання. Ми відповімо якомога швидше.', {
+                reply_markup: { remove_keyboard: true }
+            });
         }
 
         // Если пришёл с buy_ ссылкой — сразу показать оплату
