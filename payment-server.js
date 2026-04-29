@@ -70,7 +70,7 @@ function generateWayForPayForm(userId, courseName, amount) {
         <input type="hidden" name="clientFirstName" value="" />
         <input type="hidden" name="clientEmail" value="" />
         <input type="hidden" name="clientPhone" value="" />
-        <input type="hidden" name="paymentSystems" value="card;googlePay;applePay;privat24;monobank;ppmono;iabank" />
+        <input type="hidden" name="paymentSystems" value="card;googlePay;applePay;monobank;ppmono;iabank;instgrp" />
         <input type="hidden" name="serviceUrl" value="${paymentUrl}/webhook" />
         <input type="hidden" name="returnUrl" value="${paymentUrl}/success?course=${courseKey}" />
         <input type="hidden" name="merchantSignature" value="${signature}" />
