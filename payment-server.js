@@ -19,7 +19,7 @@ const courseNameMap = {
     'pro': 'Pro'
 };
 
-function generateWayForPayForm(userId, courseName, amount) {
+async function createWayForPayInvoice(userId, courseName, amount) {
     const merchantAccount = process.env.MERCHANT_ACCOUNT || 'stomat_podcast_com_ua';
     const secretKey = process.env.SECRET_KEY || 'cbab689d5545a0ce0b5d8e3ca780466139677db0';
     const domain = process.env.DOMAIN || 'stomat-podcast.com.ua';
@@ -29,9 +29,9 @@ function generateWayForPayForm(userId, courseName, amount) {
     const orderReference = `order-${userId}-${courseKey}-${Date.now()}`;
     const orderDate = Math.floor(Date.now() / 1000);
 
-    const productName = [`${courseName} — Онлайн-школа ортодонтії від А до Я`];
-    const productCount = [1];
-    const productPrice = [amount];
+    const productName = `${courseName} — Онлайн-школа ортодонтії від А до Я`;
+    const productCount = 1;
+    const productPrice = amount;
 
     const signatureSource = [
         merchantAccount,
@@ -40,9 +40,9 @@ function generateWayForPayForm(userId, courseName, amount) {
         orderDate,
         amount,
         'UAH',
-        productName.join(';'),
-        productCount.join(';'),
-        productPrice.join(';'),
+        productName,
+        productCount,
+        productPrice,
     ].join(';');
 
     const signature = crypto
@@ -50,35 +50,41 @@ function generateWayForPayForm(userId, courseName, amount) {
         .update(signatureSource)
         .digest('hex');
 
-    return `
-        <html>
-        <body>
-<form id="payForm" method="POST" action="https://secure.wayforpay.com/pay" style="display:none">
-        <input type="hidden" name="merchantAccount" value="${merchantAccount}" />
-        <input type="hidden" name="merchantDomainName" value="${domain}" />
-        <input type="hidden" name="merchantTransactionSecureType" value="AUTO" />
-        <input type="hidden" name="language" value="UA" />
-        <input type="hidden" name="orderReference" value="${orderReference}" />
-        <input type="hidden" name="orderDate" value="${orderDate}" />
-        <input type="hidden" name="amount" value="${amount}" />
-        <input type="hidden" name="currency" value="UAH" />
-        <input type="hidden" name="productLogo" value="https://s10.iimage.su/s/02/g1YEjwNxstEfAmi439LovVgsnrvZCwFqCAm9iMXjJ.jpg" />
-        <input type="hidden" name="productName" value="${productName.join(';')}" />
-        <input type="hidden" name="productCount" value="${productCount.join(';')}" />
-        <input type="hidden" name="productPrice" value="${productPrice.join(';')}" />
-        <input type="hidden" name="orderDesc" value="Оплата онлайн-навчання: ${courseName}" />
-        <input type="hidden" name="clientFirstName" value="" />
-        <input type="hidden" name="clientEmail" value="" />
-        <input type="hidden" name="clientPhone" value="" />
-        <input type="hidden" name="paymentSystems" value="card;googlePay;applePay;monobank;ppmono;iabank;instgrp" />
-        <input type="hidden" name="serviceUrl" value="${paymentUrl}/webhook" />
-        <input type="hidden" name="returnUrl" value="${paymentUrl}/success?course=${courseKey}" />
-        <input type="hidden" name="merchantSignature" value="${signature}" />
-    </form>
-            <script>document.getElementById('payForm').submit();</script>
-        </body>
-        </html>
-    `;
+    const body = {
+        transactionType: 'CREATE_INVOICE',
+        merchantAccount,
+        merchantAuthType: 'SimpleSignature',
+        merchantDomainName: domain,
+        merchantSignature: signature,
+        apiVersion: 1,
+        language: 'UA',
+        orderReference,
+        orderDate,
+        amount,
+        currency: 'UAH',
+        orderLifetime: 86400,
+        productName: [productName],
+        productPrice: [productPrice],
+        productCount: [productCount],
+        paymentSystems: 'card;googlePay;applePay;monobank;payPartsMono;payPartsAbank',
+        serviceUrl: `${paymentUrl}/webhook`,
+        returnUrl: `${paymentUrl}/success?course=${courseKey}`,
+    };
+
+    const response = await fetch('https://api.wayforpay.com/api', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+
+    const data = await response.json();
+    console.log('📦 WayForPay CREATE_INVOICE response:', JSON.stringify(data));
+
+    if (data.invoiceUrl) {
+        return data.invoiceUrl;
+    }
+
+    throw new Error(`WayForPay error: ${data.reason || JSON.stringify(data)}`);
 }
 
 function renderSuccess(courseKey, res) {
@@ -290,15 +296,20 @@ app.post('/webhook', async (req, res) => {
     }
 });
 
-app.get('/pay', (req, res) => {
+app.get('/pay', async (req, res) => {
     const { userId, courseName, amount } = req.query;
 
     if (!userId || !courseName || !amount) {
         return res.status(400).send('Missing parameters');
     }
 
-    const formHtml = generateWayForPayForm(userId, courseName, amount);
-    res.send(formHtml);
+    try {
+        const invoiceUrl = await createWayForPayInvoice(userId, courseName, amount);
+        res.redirect(invoiceUrl);
+    } catch (err) {
+        console.error('❌ CREATE_INVOICE error:', err.message);
+        res.status(500).send('Помилка створення платежу. Спробуйте ще раз.');
+    }
 });
 
 app.listen(port, () => {
