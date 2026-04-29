@@ -66,7 +66,7 @@ async function createWayForPayInvoice(userId, courseName, amount) {
         productName: [productName],
         productPrice: [productPrice],
         productCount: [productCount],
-        paymentSystems: 'card;googlePay;applePay;monobank;payPartsMono;payPartsAbank',
+        paymentSystems: 'card;googlePay;applePay;monobank;payPartsMono;payPartsAbank;iabank;instantAbank',
         serviceUrl: `${paymentUrl}/webhook`,
         returnUrl: `${paymentUrl}/success?course=${courseKey}`,
     };
